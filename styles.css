@@ -149,9 +149,27 @@ p {
 }
 
 .watchlist,
-.risk-controls {
+.risk-controls,
+.market-controls {
   display: grid;
   gap: 12px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.section-head button {
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 0 9px;
+  color: #f8fbff;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
 }
 
 .control-panel h2 {
@@ -160,9 +178,48 @@ p {
   text-transform: uppercase;
 }
 
+.select-field {
+  display: grid;
+  gap: 7px;
+  color: #d7dde6;
+  font-size: 14px;
+}
+
+.select-field select {
+  width: 100%;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #fff;
+  background: #172332;
+}
+
+.compact-field input {
+  height: 38px;
+}
+
+.context-status {
+  color: #aeb8c6;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .ticker-list {
   display: grid;
   gap: 8px;
+}
+
+.rank-group {
+  display: grid;
+  gap: 7px;
+}
+
+.rank-title {
+  display: flex;
+  justify-content: space-between;
+  color: #d7dde6;
+  font-size: 13px;
 }
 
 .watchlist button {
@@ -187,6 +244,18 @@ p {
   display: block;
   margin-top: 2px;
   text-align: left;
+}
+
+.rank-score {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+}
+
+.rank-score em {
+  color: #aeb8c6;
+  font-size: 12px;
+  font-style: normal;
 }
 
 .range-field {
@@ -261,7 +330,7 @@ p {
 }
 
 .summary-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric-tile,
@@ -296,7 +365,7 @@ p {
 }
 
 .details-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .panel {
@@ -399,6 +468,32 @@ p {
 
 .reason-list.warning li::before {
   background: var(--red);
+}
+
+.backtest-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.backtest-item {
+  min-height: 70px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.backtest-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.backtest-item strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
 }
 
 @media (max-width: 920px) {
