@@ -186,14 +186,72 @@ const symbolInput = document.querySelector("#symbolInput");
 const tickerList = document.querySelector("#tickerList");
 const riskSlider = document.querySelector("#riskSlider");
 const profitSlider = document.querySelector("#profitSlider");
+const globalMood = document.querySelector("#globalMood");
+const taiwanNewsMood = document.querySelector("#taiwanNewsMood");
+const nightFuturesInput = document.querySelector("#nightFuturesInput");
+const refreshMarketButton = document.querySelector("#refreshMarketButton");
+const marketContextStatus = document.querySelector("#marketContextStatus");
 const stockCache = new Map();
+const rankingCache = new Map();
 let currentSymbol = "2317";
 let currentStock = null;
+let marketContext = {
+  usScore: 0,
+  usLabel: "美股尚未更新",
+  updatedAt: null,
+};
 
 function weightedScore(stock, mode) {
   return Math.round(
     Object.entries(weights[mode]).reduce((sum, [key, weight]) => sum + stock.scores[key] * weight, 0)
   );
+}
+
+function getMarketContextScore() {
+  const globalScore = Number(globalMood.value);
+  const taiwanScore = Number(taiwanNewsMood.value);
+  const nightPct = parseNumber(nightFuturesInput.value);
+  const nightScore = clamp(nightPct * 3, -8, 8);
+  const raw = globalScore + taiwanScore + marketContext.usScore + nightScore;
+
+  return {
+    total: clamp(raw, -20, 20),
+    globalScore,
+    taiwanScore,
+    usScore: marketContext.usScore,
+    nightScore,
+    nightPct,
+  };
+}
+
+function getSectorSensitivity(stock) {
+  const group = stock.group || "";
+  if (group.includes("記憶體")) return 1.2;
+  if (group.includes("AI") || group.includes("半導體")) return 1.1;
+  if (group.includes("電子權值") || group.includes("晶圓")) return 1;
+  return 0.85;
+}
+
+function adjustedScore(stock, mode) {
+  const base = weightedScore(stock, mode);
+  const context = getMarketContextScore();
+  const sensitivity = getSectorSensitivity(stock);
+  const weakRiskPenalty = context.total < 0 && stock.scores.risk < 55 ? 3 : 0;
+  const adjustment = clamp(context.total * sensitivity - weakRiskPenalty, -15, 15);
+  return {
+    base,
+    total: clamp(base + adjustment),
+    adjustment,
+    context,
+  };
+}
+
+function getMarketLabel(context) {
+  if (context.total >= 10) return "偏多，短線可提高追蹤";
+  if (context.total >= 4) return "小偏多，強勢股加分";
+  if (context.total <= -10) return "偏空，隔日衝需降槓桿";
+  if (context.total <= -4) return "小偏空，追高扣分";
+  return "中性，不加不減";
 }
 
 function getVerdict(total, stock, mode) {
@@ -217,15 +275,43 @@ function getFit(stock, total) {
 }
 
 function renderWatchlist(activeSymbol) {
-  tickerList.innerHTML = watchlistMeta
-    .map(({ symbol, rank, note }) => {
-      const stock = stocks[symbol];
-      const current = symbol === activeSymbol ? ' aria-current="true"' : "";
+  const mode = new FormData(form).get("mode");
+  const ranked = watchlistMeta
+    .map((item) => {
+      const stock = rankingCache.get(item.symbol) || stocks[item.symbol];
+      const score = adjustedScore(stock, mode);
+      return { ...item, stock, score };
+    })
+    .sort((a, b) => b.score.total - a.score.total);
+
+  const groups = [
+    { title: "80 以上", range: "強勢候選", items: ranked.filter((item) => item.score.total >= 80) },
+    { title: "70-80", range: "可追蹤", items: ranked.filter((item) => item.score.total >= 70 && item.score.total < 80) },
+    { title: "60-70", range: "觀察", items: ranked.filter((item) => item.score.total >= 60 && item.score.total < 70) },
+  ];
+
+  tickerList.innerHTML = groups
+    .map((group) => {
+      const buttons = group.items.length
+        ? group.items
+            .map(({ symbol, rank, note, stock, score }) => {
+              const current = symbol === activeSymbol ? ' aria-current="true"' : "";
+              const adjustment = score.adjustment > 0 ? `+${score.adjustment}` : score.adjustment;
+              return `
+                <button type="button" data-symbol="${symbol}"${current}>
+                  <span>${rank} ${symbol} ${stock.name}<small>${note}｜${stock.group}</small></span>
+                  <b class="rank-score">${score.total}<em>${adjustment}</em></b>
+                </button>
+              `;
+            })
+            .join("")
+        : `<p class="context-status">目前沒有股票落在此區間</p>`;
+
       return `
-        <button type="button" data-symbol="${symbol}"${current}>
-          <span>${rank} ${symbol} ${stock.name}<small>${note}｜${stock.group}</small></span>
-          <b>${stock.change.toFixed(2)}%</b>
-        </button>
+        <div class="rank-group">
+          <div class="rank-title"><span>${group.title}</span><span>${group.range}</span></div>
+          ${buttons}
+        </div>
       `;
     })
     .join("");
@@ -387,6 +473,80 @@ async function fetchTwseStock(symbol) {
   return stock;
 }
 
+async function refreshWatchlistRankings() {
+  await Promise.all(
+    watchlistMeta.map(async ({ symbol }) => {
+      try {
+        const stock = await fetchTwseStock(symbol);
+        rankingCache.set(symbol, stock);
+      } catch {
+        rankingCache.set(symbol, stocks[symbol]);
+      }
+    })
+  );
+  renderWatchlist(currentSymbol);
+}
+
+async function fetchUsIndexSnapshot() {
+  const symbols = ["^GSPC", "^IXIC", "^SOX"];
+  const results = await Promise.all(
+    symbols.map(async (symbol) => {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("美股指數 API 暫時無回應");
+      const payload = await response.json();
+      const result = payload.chart?.result?.[0];
+      const closes = result?.indicators?.quote?.[0]?.close?.filter((value) => Number.isFinite(value)) || [];
+      if (closes.length < 2) throw new Error("美股資料不足");
+      const latest = closes.at(-1);
+      const previous = closes.at(-2);
+      return ((latest - previous) / previous) * 100;
+    })
+  );
+
+  const averageChange = average(results);
+  return {
+    averageChange,
+    score: clamp(averageChange * 5, -8, 8),
+    label: `S&P/Nasdaq/SOX 平均 ${averageChange.toFixed(2)}%`,
+  };
+}
+
+async function refreshMarketContext() {
+  refreshMarketButton.disabled = true;
+  marketContextStatus.textContent = "正在抓美股 S&P 500 / Nasdaq / SOX...";
+  try {
+    const snapshot = await fetchUsIndexSnapshot();
+    marketContext = {
+      usScore: snapshot.score,
+      usLabel: snapshot.label,
+      updatedAt: new Date(),
+    };
+  } catch (error) {
+    marketContext = {
+      ...marketContext,
+      usLabel: `${error.message}，保留手動情勢判斷`,
+    };
+  } finally {
+    refreshMarketButton.disabled = false;
+    renderMarketStatus();
+    rerenderCurrentView();
+  }
+}
+
+function renderMarketStatus() {
+  const context = getMarketContextScore();
+  const updatedText = marketContext.updatedAt ? `｜${formatDate(marketContext.updatedAt)}` : "";
+  marketContextStatus.textContent = `${getMarketLabel(context)}｜美股 ${marketContext.usLabel}｜夜盤 ${context.nightPct.toFixed(1)}%${updatedText}`;
+}
+
+function rerenderCurrentView() {
+  renderWatchlist(currentSymbol);
+  if (currentStock) {
+    renderStock(currentStock, currentSymbol, new FormData(form).get("mode"));
+  }
+}
+
 function buildStockFromRecords(symbol, name, records) {
   const latest = records.at(-1);
   const previous = records.at(-2);
@@ -465,6 +625,7 @@ function formatDate(date) {
 }
 
 function renderLoadingStock(symbol) {
+  const context = getMarketContextScore();
   document.querySelector("#stockTitle").textContent = `${symbol} 讀取中`;
   document.querySelector("#marketState").textContent = "正在連線 TWSE 官方資料...";
   document.querySelector("#totalScore").textContent = "...";
@@ -473,6 +634,8 @@ function renderLoadingStock(symbol) {
   document.querySelector("#overnightReason").textContent = "請稍等";
   document.querySelector("#riskLevel").textContent = "...";
   document.querySelector("#riskReason").textContent = "計算中";
+  document.querySelector("#marketScoreValue").textContent = context.total;
+  document.querySelector("#marketScoreReason").textContent = getMarketLabel(context);
   document.querySelector("#scoreRows").innerHTML = "";
   document.querySelector("#tradePlan").innerHTML = "";
   document.querySelector("#buyReasons").innerHTML = "<li>正在讀取價格、成交量與技術指標。</li>";
@@ -483,6 +646,7 @@ function renderUnknownStock(symbol, message = "此代號尚未取得資料") {
   const mode = new FormData(form).get("mode");
   const risk = Number(riskSlider.value);
   const profit = Number(profitSlider.value);
+  const context = getMarketContextScore();
 
   symbolInput.value = symbol;
   document.querySelector("#stockTitle").textContent = `${symbol || "未輸入"} 尚未有資料`;
@@ -493,6 +657,8 @@ function renderUnknownStock(symbol, message = "此代號尚未取得資料") {
   document.querySelector("#overnightReason").textContent = "沒有足夠資料可評分";
   document.querySelector("#riskLevel").textContent = "--";
   document.querySelector("#riskReason").textContent = "資料不足";
+  document.querySelector("#marketScoreValue").textContent = context.total;
+  document.querySelector("#marketScoreReason").textContent = getMarketLabel(context);
   document.querySelector("#modeLabel").textContent = mode === "overnight" ? "隔日衝權重" : "短波段權重";
   document.querySelector("#planStatus").textContent = "等待資料";
 
@@ -538,7 +704,8 @@ function renderUnknownStock(symbol, message = "此代號尚未取得資料") {
 function renderStock(stock, symbol, mode) {
   currentSymbol = symbol;
   currentStock = stock;
-  const total = weightedScore(stock, mode);
+  const score = adjustedScore(stock, mode);
+  const total = score.total;
   const verdict = getVerdict(total, stock, mode);
   const [fit, fitReason] = getFit(stock, total);
   const riskLevel = stock.scores.risk >= 68 ? "低" : stock.scores.risk >= 55 ? "中" : "高";
@@ -547,12 +714,14 @@ function renderStock(stock, symbol, mode) {
   document.querySelector("#stockTitle").textContent = `${symbol} ${stock.name}`;
   document.querySelector("#marketState").textContent = `${stock.apiSource || "示範資料"}｜${stock.group}｜資料日 ${stock.dataDate ? formatDate(stock.dataDate) : "示範"}｜參考價 ${stock.price}`;
   document.querySelector("#totalScore").textContent = total;
-  document.querySelector("#scoreLabel").textContent = verdict.label;
+  document.querySelector("#scoreLabel").textContent = `${verdict.label}｜個股 ${score.base}，情勢 ${score.adjustment >= 0 ? "+" : ""}${score.adjustment}`;
   document.querySelector("#overnightFit").textContent = fit;
   document.querySelector("#overnightReason").textContent = fitReason;
   document.querySelector("#riskLevel").textContent = riskLevel;
   document.querySelector("#riskReason").textContent =
     riskLevel === "高" ? "短線過熱或波動偏大" : riskLevel === "中" ? "需嚴格停損" : "波動相對可控";
+  document.querySelector("#marketScoreValue").textContent = score.context.total;
+  document.querySelector("#marketScoreReason").textContent = getMarketLabel(score.context);
   document.querySelector("#modeLabel").textContent = mode === "overnight" ? "隔日衝權重" : "短波段權重";
   document.querySelector("#planStatus").textContent = mode === "overnight" ? "尾盤決策" : "分批決策";
 
@@ -614,4 +783,25 @@ tickerList.addEventListener("click", (event) => {
   });
 });
 
+[
+  globalMood,
+  taiwanNewsMood,
+  nightFuturesInput,
+  ...document.querySelectorAll('input[name="mode"]'),
+].forEach((control) => {
+  control.addEventListener("input", () => {
+    renderMarketStatus();
+    rerenderCurrentView();
+  });
+  control.addEventListener("change", () => {
+    renderMarketStatus();
+    rerenderCurrentView();
+  });
+});
+
+refreshMarketButton.addEventListener("click", refreshMarketContext);
+
+renderMarketStatus();
 analyze("2317");
+refreshWatchlistRankings();
+refreshMarketContext();
