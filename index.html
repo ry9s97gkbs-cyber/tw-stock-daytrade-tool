@@ -44,9 +44,37 @@
           </button>
         </form>
 
+        <section class="market-controls" aria-label="市場情勢">
+          <div class="section-head">
+            <h2>大環境</h2>
+            <button id="refreshMarketButton" type="button">更新美股</button>
+          </div>
+          <label class="select-field">
+            <span>國際情勢</span>
+            <select id="globalMood">
+              <option value="0">中性</option>
+              <option value="6">風險偏多</option>
+              <option value="-6">風險偏空</option>
+            </select>
+          </label>
+          <label class="select-field">
+            <span>台灣新聞</span>
+            <select id="taiwanNewsMood">
+              <option value="0">中性</option>
+              <option value="6">主線利多</option>
+              <option value="-6">利空/監管/地緣風險</option>
+            </select>
+          </label>
+          <label class="field compact-field">
+            <span>台股夜盤漲跌 %</span>
+            <input id="nightFuturesInput" type="number" value="0" min="-10" max="10" step="0.1" />
+          </label>
+          <p class="context-status" id="marketContextStatus">美股指數尚未更新</p>
+        </section>
+
         <section class="watchlist" aria-label="快速選股">
-          <h2>隔日衝候選</h2>
-          <div class="ticker-list" id="tickerList"></div>
+          <h2>隔日衝推薦</h2>
+          <div class="ticker-list ranked-list" id="tickerList"></div>
         </section>
 
         <section class="risk-controls" aria-label="風控參數">
@@ -87,6 +115,11 @@
             <strong id="riskLevel">中</strong>
             <small id="riskReason">短線漲幅可控</small>
           </article>
+          <article class="metric-tile">
+            <span>大環境</span>
+            <strong id="marketScoreValue">0</strong>
+            <small id="marketScoreReason">中性，不加不減</small>
+          </article>
         </section>
 
         <section class="main-layout">
@@ -121,6 +154,13 @@
               <span>汰除</span>
             </div>
             <ul id="riskFlags" class="reason-list warning"></ul>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <h3>量化回測</h3>
+              <span id="backtestStatus">歷史樣本</span>
+            </div>
+            <div id="backtestSummary" class="backtest-grid"></div>
           </article>
         </section>
       </section>
