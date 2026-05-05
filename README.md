@@ -8,25 +8,29 @@
 - 抓取 TWSE 個股日成交資訊
 - 計算 MA5 / MA20 / MA60、RSI、MACD、量比、波動
 - 產生趨勢、價量、籌碼、基本面、題材、風險分數
-- 顯示隔日衝候選清單
+- 加入量化分數與歷史回測：尾盤收盤買、隔天開盤賣
+- 顯示隔日衝候選清單，依總分分成 80 以上、70-80、60-70
+- 加入大環境加權：國際情勢、台灣新聞、美股指數、台股夜盤
 - 支援手機與桌面瀏覽
 
 ## 部署
 
 ### GitHub Pages
 
-1. 到 repository 的 Settings → Pages。
-2. Source 選 `Deploy from a branch`。
-3. Branch 選 `main`，資料夾選 `/root`。
-4. 儲存後等待 GitHub 產生網址。
+1. 建立一個 GitHub repository。
+2. 上傳本資料夾內所有檔案。
+3. 到 repository 的 Settings → Pages。
+4. Source 選 `Deploy from a branch`。
+5. Branch 選 `main`，資料夾選 `/root`。
+6. 儲存後等待 GitHub 產生網址。
 
 ### Netlify
 
 1. 登入 Netlify。
 2. 選 `Add new site` → `Deploy manually`。
-3. 把這個 repository 或本資料夾部署上去。
+3. 把這個資料夾拖進 Netlify。
 4. 部署完成後會產生公開網址。
 
 ## 注意
 
-目前第一版已接 TWSE 上市股票資料。櫃買股票需要再接 TPEx 資料源。分析結果只作為交易輔助，不應替代停損、資金控管與個人判斷。
+目前第一版已接 TWSE 上市股票資料，並嘗試抓取 Yahoo Finance 的 S&P 500、Nasdaq、SOX 指數作為美股情勢分數。台灣新聞、國際情勢與台股夜盤先提供手動情境輸入；若要自動新聞語意分析與夜盤即時資料，下一版需要加後端代理或資料 API。分析結果只作為交易輔助，不應替代停損、資金控管與個人判斷。
